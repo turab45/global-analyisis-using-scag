@@ -9,27 +9,13 @@ import pandas as pd
 import torch
 
 from scag.config import SCAGConfig
-from scag.data import (
-    load_datasets,
-    build_graph_analysis_cohort,
-    make_split_safe,
-    build_loaders,
-)
+from scag.data import load_datasets, build_graph_analysis_cohort, make_split_safe, build_loaders
 from scag.pipeline import run_model
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Run Semantic Coactivation Graph analysis."
-    )
-
-    parser.add_argument(
-        "--dataset",
-        choices=["mnms2", "acdc"],
-        default="mnms2",
-        help="Dataset to analyze.",
-    )
-
+    parser = argparse.ArgumentParser(description="Run Semantic Coactivation Graph analysis.")
+    parser.add_argument("--dataset", choices=["mnms2", "acdc"], default="mnms2", help="Dataset to analyze.")
     return parser.parse_args()
 
 
@@ -51,24 +37,15 @@ def save_model_outputs(tag, result, cfg):
     )
 
     # Semantic granularity
-    result["granularity"].to_csv(
-        output_dir / f"{tag}_semantic_granularity.csv",
-        index=False,
-    )
+    result["granularity"].to_csv(output_dir / f"{tag}_semantic_granularity.csv", index=False)
 
     # Community enrichment
     if result["enrichment"] is not None:
-        result["enrichment"].to_csv(
-            output_dir / f"{tag}_enrichment.csv",
-            index=False,
-        )
+        result["enrichment"].to_csv(output_dir / f"{tag}_enrichment.csv", index=False)
 
     # Community ablation
     if result["ablation"] is not None:
-        result["ablation"].to_csv(
-            output_dir / f"{tag}_ablation.csv",
-            index=False,
-        )
+        result["ablation"].to_csv(output_dir / f"{tag}_ablation.csv", index=False)
 
 
 def cleanup():
@@ -83,15 +60,8 @@ def cleanup():
 
 def main():
     args = parse_args()
-
-    cfg = SCAGConfig(
-        dataset=args.dataset
-    )
-
-    cfg.output_dir.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
+    cfg = SCAGConfig(dataset=args.dataset)
+    cfg.output_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 72)
     print("SEMANTIC COACTIVATION GRAPH")
@@ -107,20 +77,9 @@ def main():
     # DATA
     # ============================================================
 
-    train_dataset, val_dataset, test_dataset, _ = load_datasets(
-        cfg
-    )
-
-    eval_dataset = build_graph_analysis_cohort(
-        val_dataset,
-        test_dataset,
-        cfg,
-    )
-
-    eval_dataset = make_split_safe(
-        train_dataset,
-        eval_dataset,
-    )
+    train_dataset, val_dataset, test_dataset, _ = load_datasets(cfg)
+    eval_dataset = build_graph_analysis_cohort(val_dataset, test_dataset, cfg)
+    eval_dataset = make_split_safe(train_dataset, eval_dataset)
 
     train_loader, eval_loader = build_loaders(
         train_dataset,
@@ -138,61 +97,28 @@ def main():
 
     for tag in cfg.architectures:
         print("\n" + "=" * 72)
-        print(
-            f"[{cfg.dataset.upper()}] "
-            f"{tag}"
-        )
+        print(f"[{cfg.dataset.upper()}] {tag}")
         print("=" * 72)
 
         try:
-            result = run_model(
-                tag=tag,
-                train_loader=train_loader,
-                eval_loader=eval_loader,
-                cfg=cfg,
-            )
+            result = run_model(tag=tag, train_loader=train_loader, eval_loader=eval_loader, cfg=cfg)
 
-            summaries.append(
-                result["summary"]
-            )
+            summaries.append(result["summary"])
+            granularity_tables.append(result["granularity"])
 
-            granularity_tables.append(
-                result["granularity"]
-            )
-
-            save_model_outputs(
-                tag,
-                result,
-                cfg,
-            )
+            save_model_outputs(tag, result, cfg)
 
             # Save progress after every architecture
-            pd.DataFrame(
-                summaries
-            ).to_csv(
-                cfg.output_dir / "summary.csv",
+            pd.DataFrame(summaries).to_csv(cfg.output_dir / "summary.csv", index=False)
+            pd.concat(granularity_tables, ignore_index=True).to_csv(
+                cfg.output_dir / "semantic_granularity_all.csv",
                 index=False,
             )
 
-            pd.concat(
-                granularity_tables,
-                ignore_index=True,
-            ).to_csv(
-                cfg.output_dir
-                / "semantic_granularity_all.csv",
-                index=False,
-            )
-
-            print(
-                f"[{tag}] DONE — "
-                f"{result['summary']['minutes']} min"
-            )
+            print(f"[{tag}] DONE — {result['summary']['minutes']} min")
 
         except Exception:
-            print(
-                f"[{tag}] FAILED\n"
-                f"{traceback.format_exc()}"
-            )
+            print(f"[{tag}] FAILED\n{traceback.format_exc()}")
 
         finally:
             cleanup()
@@ -202,45 +128,20 @@ def main():
     # ============================================================
 
     print("\n" + "=" * 72)
-    print(
-        f"FINAL SUMMARY — "
-        f"{cfg.dataset.upper()}"
-    )
+    print(f"FINAL SUMMARY — {cfg.dataset.upper()}")
     print("=" * 72)
 
     if summaries:
-        summary_df = pd.DataFrame(
-            summaries
-        )
-
-        summary_df.to_csv(
-            cfg.output_dir / "summary.csv",
-            index=False,
-        )
-
-        print(
-            summary_df.to_string(
-                index=False
-            )
-        )
+        summary_df = pd.DataFrame(summaries)
+        summary_df.to_csv(cfg.output_dir / "summary.csv", index=False)
+        print(summary_df.to_string(index=False))
 
     if granularity_tables:
-        granularity_df = pd.concat(
-            granularity_tables,
-            ignore_index=True,
-        )
-
-        granularity_df.to_csv(
-            cfg.output_dir
-            / "semantic_granularity_all.csv",
-            index=False,
-        )
+        granularity_df = pd.concat(granularity_tables, ignore_index=True)
+        granularity_df.to_csv(cfg.output_dir / "semantic_granularity_all.csv", index=False)
 
         print("\n" + "=" * 72)
-        print(
-            "ANATOMY vs PHASE vs "
-            "ANATOMY × PHASE"
-        )
+        print("ANATOMY vs PHASE vs ANATOMY × PHASE")
         print("=" * 72)
 
         columns = [
@@ -262,19 +163,8 @@ def main():
             "dm_soft_z",
         ]
 
-        available = [
-            column
-            for column in columns
-            if column in granularity_df.columns
-        ]
-
-        print(
-            granularity_df[
-                available
-            ]
-            .round(4)
-            .to_string(index=False)
-        )
+        available = [column for column in columns if column in granularity_df.columns]
+        print(granularity_df[available].round(4).to_string(index=False))
 
     print("\nSaved to:")
     print(cfg.output_dir)
