@@ -1,6 +1,0 @@
-defaults:
-  - mnms2
-  - _self_
-data:
-  view: sax
-  task: mnms2_sax_mid_2d

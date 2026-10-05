@@ -1,9 +1,0 @@
-defaults:
-  - default
-  - _self_
-data:
-  name: mnms2
-  view: lax_4c
-  task: mnms2_lax_4c
-  classes: [ARR, CIA, FALL, HCM, LV, NOR]
-  expected_sizes: {train: 160, val: 30, test: 110}

@@ -1,9 +1,0 @@
-defaults:
-  - default
-  - _self_
-data:
-  name: acdc
-  view: sax
-  task: acdc_sax_mid_2d
-  classes: [DCM, HCM, MINF, NOR, RV]
-  expected_sizes: {train: 90, val: 10, test: 50}
