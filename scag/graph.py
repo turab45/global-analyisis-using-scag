@@ -10,6 +10,8 @@ from networkx.algorithms import community as nx_comm
 from scipy.stats import hypergeom, spearmanr
 from sklearn.metrics import adjusted_mutual_info_score as ami_score
 
+from functools import lru_cache
+
 try:
     from statsmodels.stats.multitest import multipletests
     HAVE_SM = True
@@ -233,3 +235,74 @@ def community_cards(artifacts, concept_names, concept_categories):
         print(f"  comm {ci:02d}: " + ", ".join(text))
 
     return df
+
+
+def area_coupling(R, X, labeled, area_profiles, n_perm=1000, thresh=0.35, seed=3):
+    lab_idx = np.where(labeled)[0]
+    concept_ids = X[lab_idx].argmax(axis=1)
+
+    iu = np.triu_indices(len(lab_idx), 1)
+    weights = R[np.ix_(lab_idx, lab_idx)][iu]
+
+    profiles = area_profiles.astype(np.float32)
+
+    @lru_cache(maxsize=None)
+    def cosine(a, b):
+        va = profiles[:, a]
+        vb = profiles[:, b]
+        return float(
+            (va @ vb) /
+            (np.linalg.norm(va) * np.linalg.norm(vb) + 1e-12)
+        )
+
+    rng = np.random.default_rng(seed)
+    results = {}
+
+    pair_sets = [
+        ("positive", np.where(weights >= thresh)[0]),
+        ("anti", np.where(weights <= -thresh)[0]),
+    ]
+
+    for name, selected in pair_sets:
+        pairs = list(zip(iu[0][selected], iu[1][selected]))
+
+        if len(pairs) < 10:
+            print(f"  {name}: only {len(pairs)} pairs -- skipped")
+            continue
+
+        def mean_similarity(labels):
+            return np.mean([
+                cosine(int(labels[a]), int(labels[b]))
+                for a, b in pairs
+            ])
+
+        observed = mean_similarity(concept_ids)
+
+        null = np.array([
+            mean_similarity(
+                concept_ids[rng.permutation(len(concept_ids))]
+            )
+            for _ in range(n_perm)
+        ])
+
+        z = (observed - null.mean()) / (null.std() + 1e-12)
+
+        if name == "anti":
+            p = (np.sum(null <= observed) + 1) / (n_perm + 1)
+        else:
+            p = (np.sum(null >= observed) + 1) / (n_perm + 1)
+
+        results[name] = (
+            len(pairs),
+            float(observed),
+            float(z),
+            float(p),
+        )
+
+        print(
+            f"  {name:>8s} (n={len(pairs):5d}): "
+            f"area-profile cosine={observed:.4f} "
+            f"z={z:+.1f} p={p:.4f}"
+        )
+
+    return results
