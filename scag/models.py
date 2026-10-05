@@ -54,11 +54,7 @@ def adapt_first_conv(conv, in_channels, pretrained):
                     / in_channels
                 )
         else:
-            nn.init.kaiming_normal_(
-                replacement.weight,
-                mode="fan_out",
-                nonlinearity="relu",
-            )
+            nn.init.kaiming_normal_(replacement.weight, mode="fan_out", nonlinearity="relu",)
 
         if replacement.bias is not None:
             if conv.bias is None:
@@ -78,20 +74,12 @@ def make_2d_encoder(name, in_channels, initialization):
     if name.startswith("resnet"):
         feature_dim = int(model.fc.in_features)
         model.fc = nn.Identity()
-        model.conv1 = adapt_first_conv(
-            model.conv1,
-            in_channels,
-            pretrained,
-        )
+        model.conv1 = adapt_first_conv(model.conv1, in_channels, pretrained,)
 
     elif name.startswith("densenet"):
         feature_dim = int(model.classifier.in_features)
         model.classifier = nn.Identity()
-        model.features.conv0 = adapt_first_conv(
-            model.features.conv0,
-            in_channels,
-            pretrained,
-        )
+        model.features.conv0 = adapt_first_conv(model.features.conv0, in_channels,pretrained,)
 
     elif (
         name.startswith("efficientnet")
@@ -100,11 +88,7 @@ def make_2d_encoder(name, in_channels, initialization):
     ):
         feature_dim = int(model.classifier[-1].in_features)
         model.classifier[-1] = nn.Identity()
-        model.features[0][0] = adapt_first_conv(
-            model.features[0][0],
-            in_channels,
-            pretrained,
-        )
+        model.features[0][0] = adapt_first_conv(model.features[0][0], in_channels, pretrained,)
 
     else:
         raise ValueError(f"Unsupported backbone: {name}")
@@ -115,46 +99,24 @@ def make_2d_encoder(name, in_channels, initialization):
 class EDES2DClassifier(nn.Module):
     """2-D ED/ES classifier used by both M&Ms-2 and ACDC."""
 
-    def __init__(
-        self,
-        backbone,
-        formulation,
-        initialization,
-        n_classes,
-    ):
+    def __init__(self, backbone, formulation, initialization, n_classes,):
         super().__init__()
 
         self.formulation = formulation
         self.initialization = initialization
 
         if formulation == "stacked":
-            self.encoder, feature_dim = make_2d_encoder(
-                backbone,
-                in_channels=2,
-                initialization=initialization,
-            )
-
+            self.encoder, feature_dim = make_2d_encoder(backbone, in_channels=2, initialization=initialization,)
             classifier_dim = feature_dim
 
         elif formulation == "shared":
-            self.encoder, feature_dim = make_2d_encoder(
-                backbone,
-                in_channels=1,
-                initialization=initialization,
-            )
-
+            self.encoder, feature_dim = make_2d_encoder(backbone,in_channels=1, initialization=initialization,)
             classifier_dim = feature_dim * 3
 
         else:
-            raise ValueError(
-                f"Unknown formulation: {formulation}"
-            )
+            raise ValueError(f"Unknown formulation: {formulation}")
 
-        self.classifier = nn.Linear(
-            classifier_dim,
-            n_classes,
-        )
-
+        self.classifier = nn.Linear(classifier_dim, n_classes,)
         self.feature_dim = feature_dim
 
     def normalize(self, image):
@@ -172,24 +134,13 @@ class EDES2DClassifier(nn.Module):
         ed = self.encoder(image[:, 0:1])
         es = self.encoder(image[:, 1:2])
 
-        return {
-            "ed": ed,
-            "es": es,
-            "delta": es - ed,
-        }
+        return {"ed": ed, "es": es, "delta": es - ed,}
 
     def forward(self, image):
         features = self.forward_features(image)
 
         if isinstance(features, dict):
-            features = torch.cat(
-                [
-                    features["ed"],
-                    features["es"],
-                    features["delta"],
-                ],
-                dim=1,
-            )
+            features = torch.cat([features["ed"], features["es"], features["delta"],], dim=1,)
 
         return self.classifier(features)
 
@@ -214,9 +165,7 @@ def _expected_checkpoint_metadata(tag, cfg):
             "initialization": cfg.initialization,
         }
 
-    raise ValueError(
-        f"Unsupported dataset: {cfg.dataset}"
-    )
+    raise ValueError(f"Unsupported dataset: {cfg.dataset}")
 
 
 def build_model(tag, cfg):
@@ -230,73 +179,38 @@ def build_model(tag, cfg):
     )
 
     if not checkpoint_path.is_file():
-        raise FileNotFoundError(
-            f"Checkpoint not found: {checkpoint_path}"
-        )
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
     try:
-        state = torch.load(
-            checkpoint_path,
-            map_location="cpu",
-            weights_only=False,
-        )
+        state = torch.load(checkpoint_path,map_location="cpu",weights_only=False,)
     except TypeError:
-        state = torch.load(
-            checkpoint_path,
-            map_location="cpu",
-        )
+        state = torch.load(checkpoint_path, map_location="cpu",)
 
-    expected = _expected_checkpoint_metadata(
-        tag,
-        cfg,
-    )
+    expected = _expected_checkpoint_metadata(tag, cfg,)
 
     for key, value in expected.items():
         if state.get(key) != value:
-            raise RuntimeError(
-                f"Checkpoint {key}="
-                f"{state.get(key)!r}, "
-                f"expected {value!r}"
-            )
+            raise RuntimeError(f"Checkpoint {key}={state.get(key)!r}, expected {value!r}")
 
-    model = EDES2DClassifier(
-        backbone=tag,
-        formulation=cfg.formulation,
-        initialization="randinit",
-        n_classes=len(cfg.classes),
-    )
+    model = EDES2DClassifier(backbone=tag, formulation=cfg.formulation, initialization="randinit", n_classes=len(cfg.classes),)
 
-    model.load_state_dict(
-        state["model"],
-        strict=True,
-    )
+    model.load_state_dict(state["model"],strict=True,)
 
     # We construct without downloading ImageNet weights because
     # checkpoint weights are loaded immediately afterwards.
     # This restores the normalization used during training.
     model.initialization = cfg.initialization
 
-    layer_name = state[
-        "feature_layer_candidates"
-    ][-1]
+    layer_name = state["feature_layer_candidates"][-1]
 
     modules = dict(model.named_modules())
 
     if layer_name not in modules:
-        raise RuntimeError(
-            f"Feature layer {layer_name!r} "
-            f"not found in {tag}."
-        )
+        raise RuntimeError(f"Feature layer {layer_name!r} not found in {tag}.")
 
     hook_target = modules[layer_name]
 
-    print(
-        f"[{cfg.dataset}/{tag}] "
-        f"loaded checkpoint: {checkpoint_path}"
-    )
-    print(
-        f"[{cfg.dataset}/{tag}] "
-        f"SCAG layer: {layer_name}"
-    )
+    print(f"[{cfg.dataset}/{tag}] loaded checkpoint: {checkpoint_path}")
+    print(f"[{cfg.dataset}/{tag}] SCAG layer: {layer_name}")
 
     return model, hook_target, layer_name
