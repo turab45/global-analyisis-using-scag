@@ -67,6 +67,7 @@ SCAG/
 │
 ├── demo_mnms2.ipynb       # step-by-step M&Ms-2 example
 ├── demo_acdc.ipynb        # step-by-step ACDC example
+├── cmri-concept-profiles.ipynb # SAX/LAX image and class concept profiles
 ├── run_scag.py            # multi-architecture runner
 ├── requirements.txt
 └── README.md
@@ -137,6 +138,10 @@ architecture_bank/2d/acdc_sax_mid_2d/resnet18/stacked/imagenet/seed_0/best_val_m
 ## Step-by-step demos
 
 Use the notebooks when you want to inspect every SCAG stage separately.
+
+For image-level interpretation, open `cmri-concept-profiles.ipynb` (renamed from `cmri-gradcma.ipynb`). It restores both SAX/LAX ResNet50 checkpoints, shows original ED/ES images, calibrates Network Dissection on training-split masks, and plots concept profiles as horizontal stacked bars using paired red, blue, and yellow colors. Side-by-side SAX/LAX figures show both percentage shares of named concept strength and raw signed contributions for the predicted or selected class. It uses the saved preprocessing configuration without the training checkout. Originals, activation arrays, concept associations, CSV profiles, and figures are saved under `outputs/concept_profiles/`; comparison figures are also exported as PNG/SVG under `comparison/<split>/`.
+
+Within each `<view>/<split>/`, exports use `original_<CLASS>/`, `masks_<CLASS>/`, and `concept_<CLASS>/percentage/` or `raw/`, grouped by the image's ground-truth diagnosis. Original images and separate anatomy overlays share patient/phase filenames; concept figures place masked ED/ES images above one profile bar. CSV/NPZ files, including integer segmentation labels, live in `data/`.
 
 ### M&Ms-2
 
