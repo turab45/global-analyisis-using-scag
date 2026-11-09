@@ -201,7 +201,8 @@ def build_model(tag, cfg):
     # This restores the normalization used during training.
     model.initialization = cfg.initialization
 
-    layer_name = state["feature_layer_candidates"][-1]
+    model.feature_layer_candidates = tuple(state["feature_layer_candidates"])
+    layer_name = model.feature_layer_candidates[-1]
 
     modules = dict(model.named_modules())
 

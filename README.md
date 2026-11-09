@@ -69,6 +69,8 @@ SCAG/
 ├── demo_acdc.ipynb        # step-by-step ACDC example
 ├── cmri-concept-profiles.ipynb # SAX/LAX image and class concept profiles
 ├── run_scag.py            # multi-architecture runner
+├── threshold_analysis.py  # threshold sweep with printed lists + CSV
+├── threshold_analysis.ipynb # all-model DataFrame + inline threshold plots
 ├── requirements.txt
 └── README.md
 ```
@@ -298,6 +300,35 @@ Louvain communities are then evaluated for:
 - partition stability across Louvain seeds
 - concept enrichment
 
+### Threshold sensitivity
+
+Open `threshold_analysis.ipynb` to run all configured architectures for both datasets (11 M&Ms-2 models and 10 ACDC models). It reuses saved SCAG matrices when available; otherwise it extracts activations and calibrates concept labels from the trained checkpoints using the existing data/model helpers. Results are combined in `df`, with one row per dataset/model/threshold, and six threshold curves are displayed for each dataset. The notebook does not export CSVs, matrices, or figures; any model failures are reported in `failures_df`.
+
+Sweep the coactivation correlation cutoff using an existing SCAG archive:
+
+```bash
+python threshold_analysis.py scag_outputs/acdc/resnet18_scag.npz
+python threshold_analysis.py scag_outputs/mnms2/resnet18_scag.npz --thresholds 0.2 0.3 0.35 0.4 0.5
+```
+
+The default thresholds are `[0.1, 0.2, 0.3, 0.35, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]`, including the current `tau = 0.35`. The script prints a Python list for each metric and saves one CSV row per threshold beside the input, e.g. `resnet18_scag_thresholds.csv`. Use `--output path/to/results.csv` to choose a destination. Saved archives use `R_eval`; model inference is not repeated.
+
+You can also call it directly after computing `R_eval`, `X`, and `labeled` in either demo notebook:
+
+```python
+from threshold_analysis import analyze_thresholds
+
+results = analyze_thresholds(R_eval, X, labeled, thresholds=[0.2, 0.3, 0.35, 0.4, 0.5])
+thresholds = results["threshold"]
+edge_counts = results["n_edges"]
+modularities = results["modularity"]
+semantic_amis = results["ami"]
+```
+
+Results also include retained node and isolate counts, density, mean degree, connected-component count, largest-component fraction, community count, and retained labeled-neuron count. Edges use the existing `R[i, j] >= tau` rule, exclude zero correlations, and retain their correlation weights. Isolated neurons are removed as in the main pipeline. Density and largest-component fraction use **all original neurons** as the denominator; mean degree uses retained neurons. Semantic AMI compares communities with the dominant concept of retained labeled neurons. Empty graphs have zero size/connectivity statistics and `NaN` modularity/AMI; AMI is also `NaN` with fewer than two labeled neurons.
+
+Louvain uses seed 42 for reproducibility. This is a descriptive sensitivity sweep: it does not run permutation tests, repeated-seed stability checks, ablation, or plotting.
+
 ## Causal ablation
 
 For each eligible Louvain community, SCAG zeros its feature channels at the selected network layer and measures the change in model predictions.
@@ -359,3 +390,39 @@ For a new environment or code change:
 3. Confirm dataset sizes, feature layer, `X`, `R`, `Q`, graph statistics, and ablation output.
 4. Run the full architecture bank with `run_scag.py`.
 5. Compare ACDC and M&Ms-2 results using the shared `dataset` and `tag` columns.
+
+## SemanticLens-inspired analyses across layers
+
+`run_semantic_analysis.py` adds concept-centred analysis without changing the original runner. It uses all spatial feature layers listed in each checkpoint by default. Explicit module names allow earlier layers too; each layer is analysed independently. These are within-layer coactivation graphs, not cross-layer attribution or causal-flow graphs.
+
+```bash
+# All designated layers of ResNet18, including concept-guided ablation
+python run_semantic_analysis.py --dataset acdc --models resnet18 --layers all
+
+# Specific early and late layers, descriptive analyses only
+python run_semantic_analysis.py --dataset mnms2 --models resnet18 --layers encoder.layer1 encoder.layer4 --skip-ablation
+
+# All architectures, anatomy-by-phase vocabulary
+python run_semantic_analysis.py --dataset acdc --semantic-level anatomy_phase --skip-ablation
+```
+
+The default vocabulary is anatomy (RV, MYO, LV); `--semantic-level phase` and `anatomy_phase` reuse the existing semantic views. Anatomy/phase scores are sums of the existing phase-specific IoUs, not newly calibrated union-mask IoUs. Background is excluded because the existing dissection code assigns it zero. Neurons with nonzero profiles are included even below the existing hard-label threshold; query and enrichment membership use `--gamma` (default 0.015).
+
+Implemented analyses:
+
+- **Concept relationships:** `W = S.T @ A @ S`, with positive `R >= tau` edges, zero diagonal, raw weights, weights per total adjacency mass, and the semantic-only `S.T @ S` baseline. Within-concept entries count both orientations of undirected edges. Train/evaluation graphs use the same training-derived `S`.
+- **Null validation:** complete neuron-profile shuffling with the graph fixed, plus degree-quartile-stratified profile shuffling. Tied degrees stay together. Profile shuffling is algebraically equivalent to randomly relabelling graph nodes while holding `S` fixed; it is not independent-edge rewiring. Exports include null mean, excess weight, z, one-sided enrichment p and BH-adjusted q. Degenerate nulls have undefined z. BH correction is within each layer/split/null across unique concept pairs including the diagonal, not across the entire architecture bank. Null tests assess organisation conditional on these patients, not uncertainty under patient resampling.
+- **Traceable concept queries:** all neurons above gamma, all edges between those seeds, and up to `--neighbors 3` strongest outside neighbours per seed. Node CSVs retain every concept score; edge CSVs retain neuron IDs and correlation weights. `supporting_examples.csv` links each neuron to its five highest mean-activation training patients, their split, data directory and sample index. These illustrate node responses; they are not per-image causal evidence for an edge.
+- **Community organisation:** multi-label concept enrichment with BH correction and semantic variance explained (SVE) against size-preserving partition permutations. The population is nonisolated neurons with nonzero profiles; isolated neurons do not inflate SVE through singleton communities.
+- **Semantic/functional pairs:** signed correlation versus cosine similarity, four categories using prespecified `--tau 0.35` and `--similarity 0.8`, profile-permutation count tests, and all neuron pairs in compressed CSV. Zero-profile neurons have undefined semantics and are excluded. High coactivation alone does not establish functional redundancy.
+- **Concept-guided intervention:** training-derived joint score `S[:, c] * (A_train @ S[:, c])` versus semantic-only, weighted-degree-only and random selection. All strategies use the same layer, evaluation patients, channel pool and channel count. Default budgets are 1%, 5%, 10%, rounded up; random selection repeats 20 times. Rankings break ties by neuron ID and report how many selected neurons have positive scores. Exports include individual selections, aggregate KL/flip rates and patient-level effects. Repeat SD describes random-selection variability, not a patient confidence interval.
+
+Results go to `scag_outputs/semantic_analysis/<dataset>/<semantic-level>/<model>/<layer>/`: representations, provenance, relation/null tables, enrichment/SVE, query nodes/edges, pair categories, ablations and PNG figures. Parent-level `relations_all.csv` and comparison heatmaps align the same concept pairs across models, layers and train/evaluation splits. Raw weights depend on layer width and graph density; inspect null-adjusted and edge-mass-normalised values alongside them. Layer names from different architectures do not imply equivalent depth. The evidence figure displays only the 12 strongest query edges per concept; CSVs retain the complete query. A rerun with the same output path replaces that run's files; choose `--output` for separate configurations.
+
+The runner verifies disjoint training/evaluation patient IDs. Rankings are never fitted to evaluation activations, but evaluation remains the existing official validation-plus-test cohort, not a newly untouched test set. Prediction sensitivity does not by itself establish concept-specific causality or anatomical relations. Activation-matched control selection, patient bootstrap uncertainty, broader artefact auditing and SemanticLens-style example-embedding clarity/polysemanticity are not implemented.
+
+Use `--permutations` and `--random-repeats` for exploratory versus final experiments. Early layers require more activation memory; layers are processed sequentially and training maps are released before evaluation extraction. `--skip-ablation` avoids repeated inference. Failures are recorded in `failures.json`, and partial runs exit nonzero.
+
+```bash
+python -m pytest tests/test_semantic_analysis.py tests/test_threshold_analysis.py -q
+```

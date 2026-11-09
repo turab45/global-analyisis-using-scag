@@ -1,0 +1,44 @@
+{
+  "dataset": "acdc",
+  "models": [
+    "resnet18"
+  ],
+  "layers": [
+    "all"
+  ],
+  "semantic_level": "anatomy",
+  "tau": 0.35,
+  "gamma": 0.015,
+  "similarity": 0.8,
+  "permutations": 9,
+  "random_repeats": 2,
+  "budgets": [
+    0.01
+  ],
+  "neighbors": 3,
+  "seed": 42,
+  "batch_size": 16,
+  "skip_ablation": false,
+  "output": "outputs/semantic_analysis_smoke",
+  "model": "resnet18",
+  "layer": "encoder.layer1",
+  "concepts": [
+    "RV",
+    "MYO",
+    "LV"
+  ],
+  "checkpoint": "/media/kislay/New Volume/Turab/results/cinema_reproduction/architecture_bank/2d/acdc_sax_mid_2d/resnet18/stacked/imagenet/seed_0/best_val_mcc.pt",
+  "n_train": 4,
+  "n_eval": 4,
+  "score_source": "train",
+  "alpha": 0.005,
+  "eta": 0.015,
+  "model_seed": 0,
+  "formulation": "stacked",
+  "initialization": "imagenet",
+  "edge_meaning": "positive within-layer Spearman coactivation; not causal or anatomical",
+  "evaluation_splits": [
+    "test"
+  ],
+  "smoke_only": true
+}

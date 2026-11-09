@@ -4,6 +4,54 @@ import numpy as np
 import torch
 
 
+def concept_masks(segments, level):
+    """Masks on the shared ED/ES image grid; anatomy is the union across phases."""
+    if segments.ndim != 4 or segments.shape[1] != 2 or not torch.all((segments >= 0) & (segments <= 3)):
+        raise ValueError("Require N x 2 x H x W raw ED/ES labels in {0,1,2,3}.")
+    if level == "anatomy":
+        return torch.stack([(segments == c).any(dim=1) for c in (1, 2, 3)], dim=1), ["RV", "MYO", "LV"]
+    if level == "phase":
+        return segments > 0, ["ED_foreground", "ES_foreground"]
+    if level == "anatomy_phase":
+        return torch.stack([segments[:, phase] == c for phase in (0, 1) for c in (1, 2, 3)], dim=1), [f"{name}_{phase}" for phase in ("ED", "ES") for name in ("RV", "MYO", "LV")]
+    raise ValueError(f"Unknown semantic level: {level}")
+
+
+def concept_profiles(activations, masks, alpha=0.005, thresholds=None, device="cpu", batch_size=8, channel_batch=16):
+    """Exact aggregate and per-patient IoU using training-calibrated thresholds."""
+    if activations.ndim != 4 or masks.ndim != 4 or len(activations) != len(masks) or not len(masks):
+        raise ValueError("Activations and concept masks must have matching nonempty sample axes.")
+    if not 0 < alpha < 1 or not torch.isfinite(activations).all() or min(batch_size, channel_batch) < 1:
+        raise ValueError("Require finite activations, alpha in (0,1), and positive batch sizes.")
+    n, channels = activations.shape[:2]
+    if thresholds is None:
+        thresholds = np.percentile(activations.numpy().reshape(n, channels, -1), 100 * (1 - alpha), axis=(0, 2))
+    thresholds = np.asarray(thresholds)
+    if thresholds.shape != (channels,) or not np.isfinite(thresholds).all():
+        raise ValueError("One finite training threshold per channel is required.")
+    intersection = np.zeros((n, channels, masks.shape[1]), dtype=np.float64)
+    union = np.zeros_like(intersection)
+    cutoffs = torch.as_tensor(thresholds, dtype=activations.dtype, device=device)
+    with torch.inference_mode():
+        for start in range(0, n, batch_size):
+            end = min(n, start + batch_size)
+            targets = masks[start:end].to(device=device, dtype=torch.float32).flatten(2)
+            target_area = targets.sum(dim=2)
+            for k in range(0, channels, channel_batch):
+                stop = min(channels, k + channel_batch)
+                up = torch.nn.functional.interpolate(activations[start:end, k:stop].to(device), size=masks.shape[-2:], mode="bilinear", align_corners=False)
+                # Strict > avoids assigning concepts to dead or constant channels.
+                active = (up > cutoffs[k:stop][None, :, None, None]).float().flatten(2)
+                overlap = torch.bmm(active, targets.transpose(1, 2))
+                area = active.sum(dim=2)[:, :, None] + target_area[:, None, :] - overlap
+                intersection[start:end, k:stop] = overlap.cpu().numpy()
+                union[start:end, k:stop] = area.cpu().numpy()
+    summed_union = union.sum(axis=0)
+    S = np.divide(intersection.sum(axis=0), summed_union, out=np.zeros_like(summed_union), where=summed_union > 0)
+    per_patient = np.divide(intersection, union, out=np.zeros_like(intersection), where=union > 0)
+    return {"S": S, "per_patient_iou": per_patient, "intersection": intersection, "union": union, "thresholds": thresholds}
+
+
 def compute_neuron_concept_matrix(activations, segments, num_concepts, alpha, eta):
     N, F, _, _ = activations.shape
     _, _, H, W = segments.shape

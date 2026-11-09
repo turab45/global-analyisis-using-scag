@@ -1,12 +1,18 @@
 import numpy as np
 import torch
-from scipy.stats import spearmanr
+from scipy.stats import rankdata, spearmanr
 
 
 def compute_R(activations):
     """Neuron-neuron coactivation matrix using Spearman correlation."""
     pooled = torch.mean(activations, dim=(2, 3)).numpy()
-    R = np.nan_to_num(spearmanr(pooled, axis=0)[0])
+    if pooled.shape[0] < 2:
+        raise ValueError("Coactivation requires at least two samples.")
+    ranks = rankdata(pooled, axis=0)
+    ranks -= ranks.mean(axis=0)
+    norms = np.linalg.norm(ranks, axis=0)
+    ranks = np.divide(ranks, norms, out=np.zeros_like(ranks), where=norms > 0)
+    R = np.clip(ranks.T @ ranks, -1, 1)
     np.fill_diagonal(R, 0.0)
     return R
 
