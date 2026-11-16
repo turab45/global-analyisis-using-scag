@@ -31,6 +31,7 @@ def concept_profiles(activations, masks, alpha=0.005, thresholds=None, device="c
         raise ValueError("One finite training threshold per channel is required.")
     intersection = np.zeros((n, channels, masks.shape[1]), dtype=np.float64)
     union = np.zeros_like(intersection)
+    activation_area = np.zeros((n, channels), dtype=np.float64)
     cutoffs = torch.as_tensor(thresholds, dtype=activations.dtype, device=device)
     with torch.inference_mode():
         for start in range(0, n, batch_size):
@@ -42,6 +43,7 @@ def concept_profiles(activations, masks, alpha=0.005, thresholds=None, device="c
                 up = torch.nn.functional.interpolate(activations[start:end, k:stop].to(device), size=masks.shape[-2:], mode="bilinear", align_corners=False)
                 # Strict > avoids assigning concepts to dead or constant channels.
                 active = (up > cutoffs[k:stop][None, :, None, None]).float().flatten(2)
+                activation_area[start:end, k:stop] = active.sum(dim=2).cpu().numpy()
                 overlap = torch.bmm(active, targets.transpose(1, 2))
                 area = active.sum(dim=2)[:, :, None] + target_area[:, None, :] - overlap
                 intersection[start:end, k:stop] = overlap.cpu().numpy()
@@ -49,7 +51,7 @@ def concept_profiles(activations, masks, alpha=0.005, thresholds=None, device="c
     summed_union = union.sum(axis=0)
     S = np.divide(intersection.sum(axis=0), summed_union, out=np.zeros_like(summed_union), where=summed_union > 0)
     per_patient = np.divide(intersection, union, out=np.zeros_like(intersection), where=union > 0)
-    return {"S": S, "per_patient_iou": per_patient, "intersection": intersection, "union": union, "thresholds": thresholds}
+    return {"S": S, "per_patient_iou": per_patient, "intersection": intersection, "union": union, "thresholds": thresholds, "activation_area": activation_area, "mask_area": masks.flatten(2).sum(dim=2).numpy(), "image_pixels": int(masks.shape[-2] * masks.shape[-1])}
 
 
 def compute_neuron_concept_matrix(activations, segments, num_concepts, alpha, eta):

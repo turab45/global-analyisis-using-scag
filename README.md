@@ -20,6 +20,44 @@ coactivation graph
         └── causal community ablation
 ```
 
+
+## Current multilayer experiments and checkpoints
+
+Start with **`scag_resnet18_from_scratch.ipynb`** (the filename is historical; it also supports DenseNet-121 and DenseNet-161). All model, dataset, stage, query and intervention settings are in its top configuration cell. Restart the kernel and run from the top when switching models. Fixed-budget and variable-size traversal comparisons are separate experiments. Current notebook graphs use training patients; validation is the default evaluation split. The pooled graph-cohort description below applies to the original pipeline, not this notebook.
+
+- Model architectures/checkpoint loading: `scag/models.py`.
+- Paths, model seeds, dataset configuration: `scag/config.py`.
+- Checkpoint index, exact paths, sizes, SHA-256 and download URLs: [`checkpoints/manifest.json`](checkpoints/manifest.json).
+- Weights: [GitHub release `checkpoints-v1`](https://github.com/turab45/global-analyisis-using-scag/releases/tag/checkpoints-v1), kept outside Git history.
+- Download helper: `scripts/download_checkpoints.py` (Python 3.11+, GitHub CLI; authenticate with `gh auth login` for private repository access).
+- Research plans and methodological notes: `ideas/`.
+
+The release contains **63 existing checkpoints, approximately 3.65 GiB**: ACDC has 10 architectures × 3 seeds; M&Ms-2 has 11 architectures × 3 seeds. Download only the models you need:
+
+```bash
+export CINEMA_RESULTS_ROOT="$PWD/cinema_results"
+python scripts/download_checkpoints.py --dataset acdc --model densenet121 --seed 0 --list
+python scripts/download_checkpoints.py --dataset acdc --model densenet121 --seed 0
+# Download all checkpoints (approximately 3.65 GiB):
+python scripts/download_checkpoints.py
+```
+
+The helper verifies SHA-256, skips verified files, and refuses to overwrite different existing checkpoints. It restores these paths automatically:
+
+```text
+$CINEMA_RESULTS_ROOT/
+  architecture_bank/2d/
+    acdc_sax_mid_2d/<model>/stacked/imagenet/seed_<n>/best_val_mcc.pt
+    mnms2_lax_4c/<model>/stacked/imagenet/seed_<n>/best_val_mcc.pt
+  processed/
+    acdc/     # separately prepared dataset; not distributed here
+    mnms2/    # separately prepared dataset; not distributed here
+```
+
+Set `CINEMA_RESULTS_ROOT` **before starting Jupyter**. The original workstation root is `/media/kislay/New Volume/Turab/results/cinema_reproduction`; it is not a required path on another machine. Trained checkpoints do not include MRI datasets or the preprocessing artifacts required by `scag/data.py`. Obtain and prepare those separately under the dataset's access terms. The original training pipeline is not recreated by downloading the weights.
+
+Notebook outputs are cleared for publication. Running experiments recreates figures, patient-level evidence, graphs and CSV files under `scag_outputs/from_scratch/<dataset>_<model>/<timestamp>/`. These generated files, MRI patches, activation caches and notebook backups are excluded from Git. Graph correlations are associations; intervention results describe sensitivity under the chosen baseline, not clinical causality.
+
 ## Supported datasets
 
 | Dataset | Network input | Pathology classes | Train | Val | Test | Graph cohort |

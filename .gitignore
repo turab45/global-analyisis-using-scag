@@ -2,3 +2,21 @@
 # Python cache files inside scag
 scag/**/__pycache__/
 outputs/concept_profiles/
+
+# Generated/private experiment data stay local.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+scag_outputs/
+outputs/
+outputs (copy)/
+cinema_results/
+*.pt
+*.pth
+*.ckpt
+scag_before_*.ipynb
+scag_resnet18_from_scratch_backup_*.ipynb
+SCAG_paper.pdf
+.env
+.env.*

@@ -112,7 +112,7 @@ def analyze_layer(model, layer, loaders, cfg, args, directory, manifests):
         arrays.update({f"R_{split}": R, f"S_{split}": S_split, f"pooled_{split}": pooled})
         concept_evidence(profiles, train_S, names, manifests[split]).to_csv(directory / f"concept_evidence_{split}.csv", index=False)
         plot_overlays(acts, masks, profiles, train_S, names, loader, manifests[split], directory, split)
-        np.savez_compressed(directory / f"patient_concepts_{split}.npz", per_patient_iou=profiles["per_patient_iou"], intersection=profiles["intersection"], union=profiles["union"])
+        np.savez_compressed(directory / f"patient_concepts_{split}.npz", **{key: profiles[key] for key in ("per_patient_iou", "intersection", "union", "activation_area", "mask_area", "image_pixels", "thresholds")})
         del acts, segments, masks
         gc.collect()
         for tau in args.thresholds:

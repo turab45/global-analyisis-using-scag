@@ -1,1 +1,4 @@
 Keep function signatures, function calls, and assignments on one line when readable; keep large dictionaries and genuinely complex expressions structured across multiple lines.
+
+
+Repository map: start with README.md and scag_resnet18_from_scratch.ipynb. Model definitions are in scag/models.py. Checkpoint assets live in the GitHub release checkpoints-v1; checkpoints/manifest.json specifies SHA-256, release names and installation paths. Use scripts/download_checkpoints.py and CINEMA_RESULTS_ROOT; never commit checkpoint binaries, MRI data, activation caches, generated outputs or notebook backup files. Clear notebook cell outputs and attachments before publishing. The notebook supports ResNet-18, DenseNet-121 and DenseNet-161 via its top configuration. Do not conflate fixed-budget and variable-size intervention comparisons.

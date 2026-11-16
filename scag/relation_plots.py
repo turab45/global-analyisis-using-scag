@@ -10,13 +10,13 @@ import torch
 from .relations import concept_subgraph
 
 
-def plot_overlays(activations, masks, profiles, S_train, names, loader, manifest, directory, split):
+def plot_overlays(activations, masks, profiles, S_train, names, loader, manifest, directory, split, sample_index=None):
     """Show training-selected neurons with concept-overlap evidence on each split."""
     fig, axes = plt.subplots(len(names), 3, figsize=(10, 3.5 * len(names)), squeeze=False, layout="constrained")
     for c, name in enumerate(names):
         neuron = int(np.argmax(S_train[:, c]))
         iou = profiles["per_patient_iou"][:, neuron, c]
-        sample = int(np.argmax(iou))
+        sample = int(np.argmax(iou)) if sample_index is None else sample_index
         images = loader.dataset[sample][0].numpy()
         up = torch.nn.functional.interpolate(activations[sample:sample + 1, neuron:neuron + 1], size=masks.shape[-2:], mode="bilinear", align_corners=False)[0, 0].numpy()
         active = up > profiles["thresholds"][neuron]
@@ -34,8 +34,12 @@ def plot_overlays(activations, masks, profiles, S_train, names, loader, manifest
         axes[c, 2].set_title(f"Shared-grid concept overlap: IoU={iou[sample]:.4f}\nMagenta: concept; cyan: activation; white: both")
         for ax in axes[c]:
             ax.axis("off")
-    fig.suptitle(f"{split}: neuron selected on training IoU; patient selected for illustrative overlap")
-    fig.savefig(directory / f"concept_overlays_{split}.png", dpi=160)
+    selection = "highest-overlap patient" if sample_index is None else "seeded patient selection, independent of overlap"
+    for ax in axes.flat:
+        ax.title.set_fontsize(8)
+    fig.suptitle(f"{split}: neuron selected on training IoU; {selection}")
+    suffix = "" if sample_index is None else f"_sample_{sample_index}"
+    fig.savefig(directory / f"concept_overlays_{split}{suffix}.png", dpi=160)
     plt.close(fig)
 
 
